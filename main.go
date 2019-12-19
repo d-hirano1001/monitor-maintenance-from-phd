@@ -36,23 +36,52 @@ func handler(req Request) (string, error) {
 	sess := session.Must(session.NewSession())
 	assumeRoler := sts.New(sess)
 
-	filter := &health.EventFilter{
+	eventFilter := &health.EventFilter{
 		EventStatusCodes: []*string{
 			aws.String(health.EventStatusCodeOpen),
 			aws.String(health.EventStatusCodeUpcoming),
+			aws.String(health.EventStatusCodeClosed), // for test
 		},
 		EventTypeCategories: []*string{
 			aws.String(health.EventTypeCategoryScheduledChange),
 		},
 	}
 
+	eventParam := &health.DescribeEventsInput{
+		Filter: eventFilter,
+	}
+
 	for _, target := range req.TargetList {
 		creds := stscreds.NewCredentialsWithClient(assumeRoler, target.Role)
 		svc := health.New(sess, aws.NewConfig().WithRegion("us-east-1").WithCredentials(creds))
 
-		result, err := svc.DescribeEvents(&health.DescribeEventsInput{
-			Filter: filter,
+		var arns []*string
+		err := svc.DescribeEventsPages(eventParam, func(resp *health.DescribeEventsOutput, lastPage bool) bool {
+			for _, event := range resp.Events {
+				arns = append(arns, event.Arn)
+			}
+			return true
 		})
+
+		if err != nil {
+			fmt.Println(err.Error())
+			continue
+		}
+
+		entityFilter := &health.EntityFilter{
+			EventArns: arns,
+		}
+
+		entityParam := &health.DescribeAffectedEntitiesInput{
+			Filter: entityFilter,
+		}
+
+		var entities []*health.AffectedEntity
+		err = svc.DescribeAffectedEntitiesPages(entityParam, func(resp *health.DescribeAffectedEntitiesOutput, lastPage bool) bool {
+			entities = append(entities, resp.Entities...)
+			return true
+		})
+
 		if err != nil {
 			fmt.Println(err.Error())
 			continue
@@ -62,7 +91,7 @@ func handler(req Request) (string, error) {
 			&mackerel.MetricValue{
 				Name:  "monitor-maintenance." + target.Name,
 				Time:  nowTime.Unix(),
-				Value: len(result.Events),
+				Value: len(entities),
 			},
 		})
 		if err != nil {
