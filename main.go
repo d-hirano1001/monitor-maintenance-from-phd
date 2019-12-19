@@ -36,19 +36,16 @@ func handler(req Request) (string, error) {
 	sess := session.Must(session.NewSession())
 	assumeRoler := sts.New(sess)
 
-	eventFilter := &health.EventFilter{
-		EventStatusCodes: []*string{
-			aws.String(health.EventStatusCodeOpen),
-			aws.String(health.EventStatusCodeUpcoming),
-			aws.String(health.EventStatusCodeClosed), // for test
-		},
-		EventTypeCategories: []*string{
-			aws.String(health.EventTypeCategoryScheduledChange),
-		},
-	}
-
 	eventParam := &health.DescribeEventsInput{
-		Filter: eventFilter,
+		Filter: &health.EventFilter{
+			EventStatusCodes: []*string{
+				aws.String(health.EventStatusCodeOpen),
+				aws.String(health.EventStatusCodeUpcoming),
+			},
+			EventTypeCategories: []*string{
+				aws.String(health.EventTypeCategoryScheduledChange),
+			},
+		},
 	}
 
 	for _, target := range req.TargetList {
@@ -68,12 +65,10 @@ func handler(req Request) (string, error) {
 			continue
 		}
 
-		entityFilter := &health.EntityFilter{
-			EventArns: arns,
-		}
-
 		entityParam := &health.DescribeAffectedEntitiesInput{
-			Filter: entityFilter,
+			Filter: &health.EntityFilter{
+				EventArns: arns,
+			},
 		}
 
 		var entities []*health.AffectedEntity
@@ -99,7 +94,6 @@ func handler(req Request) (string, error) {
 			continue
 		}
 	}
-
 	return "ok", nil
 }
 
