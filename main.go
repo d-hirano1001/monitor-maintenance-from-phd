@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -61,7 +62,7 @@ func handler(req Request) (string, error) {
 		})
 
 		if err != nil {
-			fmt.Println(err.Error())
+			log.Println(err.Error())
 			continue
 		}
 
@@ -78,9 +79,11 @@ func handler(req Request) (string, error) {
 		})
 
 		if err != nil {
-			fmt.Println(err.Error())
+			log.Println(err.Error())
 			continue
 		}
+
+		entities = removeUnknown(entities)
 
 		err = client.PostServiceMetricValues(target.Service, []*mackerel.MetricValue{
 			&mackerel.MetricValue{
@@ -95,6 +98,17 @@ func handler(req Request) (string, error) {
 		}
 	}
 	return "ok", nil
+}
+
+func removeUnknown(e []*health.AffectedEntity) []*health.AffectedEntity {
+	result := []*health.AffectedEntity{}
+	for _, v := range e {
+		if *v.EntityValue == health.EntityStatusCodeUnknown {
+			continue
+		}
+		result = append(result, v)
+	}
+	return result
 }
 
 func main() {
